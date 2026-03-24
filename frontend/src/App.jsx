@@ -75,6 +75,12 @@ export default function App() {
 
   const runtimeNotice = notice.startsWith("运行时任务记录已保存到") ? notice : "";
   const sidebarNotice = runtimeNotice ? "" : notice;
+  const quickModeStatus = qaResult?.output_path
+    ? `学习问答结果已保存到 ${qaResult.output_path}`
+    : "快速问答结果会显示在这里，方便你确认本轮回答是否已经完成保存。";
+  const taskModeStatus = agentResult?.output_path
+    ? `运行时任务记录已保存到 ${agentResult.output_path}`
+    : "任务模式的运行记录会显示在这里，方便你查看本轮任务结果保存位置。";
 
   const refreshStatus = async () => {
     const [statusData, docsData] = await Promise.all([
@@ -328,7 +334,9 @@ export default function App() {
           <section className="content-card">
             <h2>任务运行</h2>
             <p className="content-copy">快速问答适合单问题检索回答；任务模式适合需要规划、补救、审核和记忆沉淀的复杂任务。</p>
-            {runtimeMode === "task" && runtimeNotice ? <div className="status-success inline-status">{runtimeNotice}</div> : null}
+            <div className="status-success inline-status">
+              {runtimeMode === "quick" ? quickModeStatus : taskModeStatus}
+            </div>
             <div className="mode-switcher">
               <button
                 className={runtimeMode === "quick" ? "mode-pill active" : "mode-pill"}
