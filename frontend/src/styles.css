@@ -649,6 +649,15 @@ textarea {
 .task-box.compact {
   min-height: 88px;
   font-size: 15px;
+  background: transparent;
+  border: 1px dashed rgba(88, 67, 39, 0.12);
+  color: #7f756a;
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+.task-box.compact::placeholder {
+  color: #a29688;
 }
 
 .stack {
