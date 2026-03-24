@@ -430,6 +430,10 @@ textarea {
   color: #b54f29;
 }
 
+.inline-status {
+  margin: 10px 0 14px;
+}
+
 .main-panel {
   padding: 28px;
   transition: padding 220ms ease;

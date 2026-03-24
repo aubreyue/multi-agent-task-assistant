@@ -73,6 +73,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const runtimeNotice = notice.startsWith("运行时任务记录已保存到") ? notice : "";
+  const sidebarNotice = runtimeNotice ? "" : notice;
+
   const refreshStatus = async () => {
     const [statusData, docsData] = await Promise.all([
       apiGet("/status"),
@@ -284,7 +287,7 @@ export default function App() {
             清空当前结果
           </button>
           {busy ? <div className="status-info">{busy}</div> : null}
-          {notice ? <div className="status-success">{notice}</div> : null}
+          {sidebarNotice ? <div className="status-success">{sidebarNotice}</div> : null}
           {error ? <div className="status-error">{error}</div> : null}
         </div>
       </aside>
@@ -325,6 +328,7 @@ export default function App() {
           <section className="content-card">
             <h2>任务运行</h2>
             <p className="content-copy">快速问答适合单问题检索回答；任务模式适合需要规划、补救、审核和记忆沉淀的复杂任务。</p>
+            {runtimeMode === "task" && runtimeNotice ? <div className="status-success inline-status">{runtimeNotice}</div> : null}
             <div className="mode-switcher">
               <button
                 className={runtimeMode === "quick" ? "mode-pill active" : "mode-pill"}
