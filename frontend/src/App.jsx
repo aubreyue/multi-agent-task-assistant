@@ -73,14 +73,36 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const qaBusy = busy.includes("正在基于学习资料回答问题");
+  const runtimeBusy = busy.includes("Multi-Agent 运行时");
+  const qaNotice = notice.startsWith("学习问答结果已保存到") ? notice : "";
   const runtimeNotice = notice.startsWith("运行时任务记录已保存到") ? notice : "";
-  const sidebarNotice = runtimeNotice ? "" : notice;
-  const quickModeStatus = qaResult?.output_path
-    ? `学习问答结果已保存到 ${qaResult.output_path}`
-    : "快速问答结果会显示在这里，方便你确认本轮回答是否已经完成保存。";
-  const taskModeStatus = agentResult?.output_path
-    ? `运行时任务记录已保存到 ${agentResult.output_path}`
-    : "任务模式的运行记录会显示在这里，方便你查看本轮任务结果保存位置。";
+  const taskAreaError = activeTab === "多Agent任务" && !!error;
+  const sidebarBusy = qaBusy || runtimeBusy ? "" : busy;
+  const sidebarNotice = qaNotice || runtimeNotice ? "" : notice;
+  const sidebarError = taskAreaError ? "" : error;
+
+  const quickModeStatus = qaBusy
+    ? { tone: "info", text: busy }
+    : taskAreaError
+      ? { tone: "error", text: error }
+      : qaNotice
+        ? { tone: "success", text: qaNotice }
+        : {
+            tone: "info",
+            text: "快速问答结果会显示在这里，方便你确认本轮回答是否已经完成保存。",
+          };
+
+  const taskModeStatus = runtimeBusy
+    ? { tone: "info", text: busy }
+    : taskAreaError
+      ? { tone: "error", text: error }
+      : runtimeNotice
+        ? { tone: "success", text: runtimeNotice }
+        : {
+            tone: "info",
+            text: "任务模式的运行记录会显示在这里，方便你查看本轮任务结果保存位置。",
+          };
 
   const refreshStatus = async () => {
     const [statusData, docsData] = await Promise.all([
@@ -292,9 +314,9 @@ export default function App() {
           <button className="secondary-button" onClick={handleClearHistory} disabled={!!busy}>
             清空当前结果
           </button>
-          {busy ? <div className="status-info">{busy}</div> : null}
+          {sidebarBusy ? <div className="status-info">{sidebarBusy}</div> : null}
           {sidebarNotice ? <div className="status-success">{sidebarNotice}</div> : null}
-          {error ? <div className="status-error">{error}</div> : null}
+          {sidebarError ? <div className="status-error">{sidebarError}</div> : null}
         </div>
       </aside>
 
@@ -334,8 +356,8 @@ export default function App() {
           <section className="content-card">
             <h2>任务运行</h2>
             <p className="content-copy">快速问答适合单问题检索回答；任务模式适合需要规划、补救、审核和记忆沉淀的复杂任务。</p>
-            <div className="status-success inline-status">
-              {runtimeMode === "quick" ? quickModeStatus : taskModeStatus}
+            <div className={`inline-status ${runtimeMode === "quick" ? `status-${quickModeStatus.tone}` : `status-${taskModeStatus.tone}`}`}>
+              {runtimeMode === "quick" ? quickModeStatus.text : taskModeStatus.text}
             </div>
             <div className="mode-switcher">
               <button
@@ -638,5 +660,8 @@ export default function App() {
         ) : null}
       </main>
     </div>
+  );
+}
+
   );
 }
