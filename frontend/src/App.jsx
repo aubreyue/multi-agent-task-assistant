@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import sheepImage from "./assets/sheep.png";
+import sheepImage from "../../pics/helloworld.jpg";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://127.0.0.1:8000/api").replace(/\/$/, "");
-const TABS = ["问答", "Agent", "摘要", "文档"];
+const TABS = ["多Agent任务", "资料总结", "资料库", "记忆库"];
 
 async function apiGet(path) {
   const response = await fetch(`${API_BASE}${path}`);
@@ -40,15 +40,6 @@ async function uploadFiles(files) {
   return data;
 }
 
-function MetricCard({ label, value }) {
-  return (
-    <div className="metric-card">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}</div>
-    </div>
-  );
-}
-
 function ResultPanel({ title, children }) {
   return (
     <section className="result-panel">
@@ -58,17 +49,26 @@ function ResultPanel({ title, children }) {
   );
 }
 
+function StatusChip({ tone, children }) {
+  return <span className={`status-chip ${tone}`}>{children}</span>;
+}
+
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("问答");
+  const [activeTab, setActiveTab] = useState("多Agent任务");
+  const [runtimeMode, setRuntimeMode] = useState("quick");
   const [status, setStatus] = useState(null);
   const [documents, setDocuments] = useState([]);
   const [autoRebuild, setAutoRebuild] = useState(true);
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaResult, setQaResult] = useState(null);
-  const [agentTask, setAgentTask] = useState("介绍一下红楼梦，然后总结并导出为 markdown。");
+  const [agentTask, setAgentTask] = useState("基于当前学习资料，整理一份关于向量检索的复习提纲，并导出为 markdown。");
+  const [agentCriteriaText, setAgentCriteriaText] = useState("优先基于本地资料回答\n结论要有资料依据\n资料不足时联网补充");
   const [agentResult, setAgentResult] = useState(null);
   const [summaryResult, setSummaryResult] = useState(null);
+  const [memoryStats, setMemoryStats] = useState(null);
+  const [memoryList, setMemoryList] = useState([]);
+  const [runtimeTasks, setRuntimeTasks] = useState([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -80,6 +80,11 @@ export default function App() {
     ]);
     setStatus(statusData);
     setDocuments(docsData.documents);
+    setMemoryStats(await apiGet("/memory/stats"));
+    const memoryData = await apiGet("/memory/list");
+    setMemoryList(memoryData.memories);
+    const runtimeTaskData = await apiGet("/runtime/tasks");
+    setRuntimeTasks(runtimeTaskData.tasks);
   };
 
   useEffect(() => {
@@ -126,13 +131,13 @@ export default function App() {
 
   const handleAsk = async () => {
     if (!qaQuestion.trim()) return;
-    setBusy("正在执行知识库问答...");
+    setBusy("正在基于学习资料回答问题...");
     setError("");
     setNotice("");
     try {
       const result = await apiPost("/qa", { question: qaQuestion });
       setQaResult(result);
-      setNotice(`问答结果已保存到 ${result.output_path}`);
+      setNotice(`学习问答结果已保存到 ${result.output_path}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -142,13 +147,18 @@ export default function App() {
 
   const handleAgent = async () => {
     if (!agentTask.trim()) return;
-    setBusy("Agent 正在规划并调用工具...");
+    setBusy("Multi-Agent 运行时正在规划任务、调度 worker 并整理结果...");
     setError("");
     setNotice("");
     try {
-      const result = await apiPost("/agent/run", { task: agentTask });
+      const criteria = agentCriteriaText
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const result = await apiPost("/runtime/run", { task: agentTask, max_rounds: 3, criteria });
       setAgentResult(result);
-      setNotice(`Agent 运行记录已保存到 ${result.output_path}`);
+      setNotice(`运行时任务记录已保存到 ${result.output_path}`);
+      await refreshStatus();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -157,13 +167,13 @@ export default function App() {
   };
 
   const handleSummary = async () => {
-    setBusy("正在生成摘要...");
+    setBusy("正在生成学习资料总结...");
     setError("");
     setNotice("");
     try {
       const result = await apiPost("/summary", {});
       setSummaryResult(result);
-      setNotice(`知识库摘要已保存到 ${result.output_path}`);
+      setNotice(`学习资料总结已保存到 ${result.output_path}`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -175,7 +185,7 @@ export default function App() {
     setQaResult(null);
     setAgentResult(null);
     setSummaryResult(null);
-    setNotice("已清空当前前端会话中的问答与 Agent 结果。");
+    setNotice("已清空当前前端会话中的问答、运行时任务和总结结果。");
     setError("");
   };
 
@@ -201,13 +211,37 @@ export default function App() {
           >
             «
           </button>
-          <div className="sidebar-title">项目控制台</div>
-          <p className="sidebar-copy">
-            这是一个从 RAG 扩展到 Agent + MCP 的学习型项目。
+          <p className="sidebar-copy sidebar-intro">
+            让 Master 负责接收任务和调度通用 Worker，Worker 直接调用 RAG、联网搜索、MCP 与记忆工具完成工作，Final Checker 负责审核结果质量，并把高价值结果沉淀进长期记忆。
           </p>
+          <div className="visual-node node-accent sidebar-master">
+            <strong>Master Agent</strong>
+            <span>负责规划任务、派发 Worker、汇总结果并检查 stop criteria。</span>
+          </div>
+          <div className="sidebar-visual">
+            <div className="visual-node">
+              <strong>Worker Agents</strong>
+              <span>通用执行单元，不固定角色，按子任务自主调用工具完成工作。</span>
+            </div>
+            <div className="visual-node node-warm">
+              <strong>Final Checker</strong>
+              <span>对最终候选答案做任务完成度和证据充分性审核。</span>
+            </div>
+            <div className="visual-node">
+              <strong>Tool Registry</strong>
+              <span>统一注册 RAG、Search、MCP、Export 与 Memory 工具供 runtime 共享。</span>
+            </div>
+            <div className="visual-node">
+              <strong>Memory Layer</strong>
+              <span>短期记忆管理上下文预算，长期记忆支持入库、检索与去重。</span>
+            </div>
+            <div className="visual-footer compact">
+              任务编排、工具使用、结果审核、记忆沉淀和前端展示形成一个闭环。
+            </div>
+          </div>
           <div className="sidebar-meta">
             <div>
-              <span>数据目录</span>
+              <span>资料目录</span>
               <strong>{status?.data_dir || "-"}</strong>
             </div>
             <div>
@@ -216,14 +250,14 @@ export default function App() {
             </div>
           </div>
           <div className="status-row">
-            <span>向量库状态</span>
+            <span>资料索引状态</span>
             <strong className={status?.vectorstore_ready ? "status-badge ready" : "status-badge"}>
               {status?.vectorstore_ready ? "已构建" : "未构建"}
             </strong>
           </div>
           <label className="upload-box">
-            <span className="upload-title">上传知识文件</span>
-            <span className="upload-copy">Drag and drop files here</span>
+            <span className="upload-title">上传学习资料</span>
+            <span className="upload-copy">导入讲义、论文、技术文档或笔记</span>
             <span className="upload-hint">Limit 200MB per file • MD, TXT, PDF</span>
             <input type="file" multiple accept=".md,.txt,.pdf" onChange={handleUpload} />
           </label>
@@ -233,17 +267,21 @@ export default function App() {
               checked={autoRebuild}
               onChange={(event) => setAutoRebuild(event.target.checked)}
             />
-            <span>上传后自动重建向量库</span>
+            <span>上传后自动重建资料索引</span>
           </label>
           <div className="status-row">
-            <span>已发现文档数</span>
+            <span>已纳入资料数</span>
             <strong className="count-badge">{documents.length}</strong>
           </div>
+          <div className="status-row">
+            <span>长期记忆数</span>
+            <strong className="count-badge">{memoryStats?.total_memories ?? 0}</strong>
+          </div>
           <button className="primary-button" onClick={handleRebuild} disabled={!!busy}>
-            构建 / 更新向量库
+            构建 / 更新资料索引
           </button>
           <button className="secondary-button" onClick={handleClearHistory} disabled={!!busy}>
-            清空对话历史
+            清空当前结果
           </button>
           {busy ? <div className="status-info">{busy}</div> : null}
           {notice ? <div className="status-success">{notice}</div> : null}
@@ -256,60 +294,18 @@ export default function App() {
           <div className="hero-layout">
             <div className="hero-main">
               <div className="hero-copy">
-                <div className="eyebrow">RAG + Agent + MCP + Web Search</div>
+                <div className="eyebrow">Master + Workers + Checker + Memory</div>
                 <div className="hero-copy-grid">
                   <h1>
-                    <span>LangChain本地知识库</span>
-                    <span className="hero-plus-line">+</span>
-                    <span>联网协同Agent</span>
+                    <span>Multi-Agent</span>
+                    <span>私人任务助理</span>
                   </h1>
                   <div className="hero-image-wrap">
                     <img src={sheepImage} alt="sheep illustration" className="hero-image" />
                   </div>
                 </div>
-                <p>
-                  一个用于学习现代 AI Agent 架构的交互式项目：本地知识库负责可控检索，Agent 负责任务编排，MCP 负责工具接入，联网搜索在信息不足时提供补充。
-                </p>
               </div>
             </div>
-            <div className="hero-visual">
-              <div className="visual-orbit"></div>
-              <div className="visual-stack">
-                <div className="visual-node node-accent">
-                  <strong>Agent Core</strong>
-                  <span>负责理解任务、决定调用哪些工具，并整合最终回答。</span>
-                </div>
-                <div className="visual-row">
-                  <div className="visual-node">
-                    <strong>Local RAG</strong>
-                    <span>文档切分、向量检索、引用片段回显。</span>
-                  </div>
-                  <div className="visual-node node-warm">
-                    <strong>Web Search</strong>
-                    <span>Tavily 联网搜索，在本地知识不足时兜底补充。</span>
-                  </div>
-                </div>
-                <div className="visual-row">
-                  <div className="visual-node">
-                    <strong>MCP Tools</strong>
-                    <span>通过协议标准化暴露知识库状态、重建索引、检索等能力。</span>
-                  </div>
-                  <div className="visual-node">
-                    <strong>Workspace UI</strong>
-                    <span>React 页面负责上传文件、运行任务和查看调用轨迹。</span>
-                  </div>
-                </div>
-                <div className="visual-footer">
-                  设计目标：让一个学习型项目同时覆盖“检索、工具编排、协议接入、可视化演示”四层能力。
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="hero-grid">
-            <MetricCard label="知识文件" value={status?.document_count ?? 0} />
-            <MetricCard label="向量库" value={status?.vectorstore_ready ? "已构建" : "未构建"} />
-            <MetricCard label="前端页签" value={TABS.length} />
-            <MetricCard label="文档清单" value={documents.length} />
           </div>
         </section>
 
@@ -325,61 +321,232 @@ export default function App() {
           ))}
         </nav>
 
-        {activeTab === "问答" ? (
+        {activeTab === "多Agent任务" ? (
           <section className="content-card">
-            <h2>知识库问答</h2>
-            <p className="content-copy">这里是纯本地 RAG 问答，只会使用知识库中已经向量化的内容。</p>
-            <textarea
-              className="task-box"
-              value={qaQuestion}
-              onChange={(event) => setQaQuestion(event.target.value)}
-              placeholder="例如：这份文档的核心结论是什么？"
-            />
-            <button className="primary-button" onClick={handleAsk} disabled={!!busy}>
-              运行问答
-            </button>
-            {qaResult ? (
-              <div className="stack">
-                <ResultPanel title="回答">{qaResult.answer}</ResultPanel>
-                <ResultPanel title="引用来源">
-                  <ul className="clean-list">
-                    {qaResult.sources.map((source) => (
-                      <li key={source}>{source}</li>
-                    ))}
-                  </ul>
-                </ResultPanel>
-                <ResultPanel title="片段预览">
+            <h2>任务运行</h2>
+            <p className="content-copy">快速问答适合单问题检索回答；任务模式适合需要规划、补救、审核和记忆沉淀的复杂任务。</p>
+            <div className="mode-switcher">
+              <button
+                className={runtimeMode === "quick" ? "mode-pill active" : "mode-pill"}
+                onClick={() => setRuntimeMode("quick")}
+              >
+                快速问答
+              </button>
+              <button
+                className={runtimeMode === "task" ? "mode-pill active" : "mode-pill"}
+                onClick={() => setRuntimeMode("task")}
+              >
+                任务模式
+              </button>
+            </div>
+
+            {runtimeMode === "quick" ? (
+              <>
+                <textarea
+                  className="task-box"
+                  value={qaQuestion}
+                  onChange={(event) => setQaQuestion(event.target.value)}
+                  placeholder="例如：这份讲义里关于 RAG 的核心概念是什么？"
+                />
+                <button className="primary-button" onClick={handleAsk} disabled={!!busy}>
+                  开始问答
+                </button>
+                {qaResult ? (
                   <div className="stack">
-                    {qaResult.source_previews.map((item) => (
-                      <div className="trace-item" key={item.label}>
-                        <strong>{item.label}</strong>
-                        <span>{item.snippet}</span>
+                    <ResultPanel title="回答">{qaResult.answer}</ResultPanel>
+                    <ResultPanel title="引用来源">
+                      <ul className="clean-list">
+                        {qaResult.sources.map((source) => (
+                          <li key={source}>{source}</li>
+                        ))}
+                      </ul>
+                    </ResultPanel>
+                    <ResultPanel title="片段预览">
+                      <div className="stack">
+                        {qaResult.source_previews.map((item) => (
+                          <div className="trace-item" key={item.label}>
+                            <strong>{item.label}</strong>
+                            <span>{item.snippet}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </ResultPanel>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <textarea
+                  className="task-box"
+                  value={agentTask}
+                  onChange={(event) => setAgentTask(event.target.value)}
+                  placeholder="例如：先检索资料和长期记忆，再整理一份关于向量检索与多 Agent Runtime 的结构化研究总结。"
+                />
+                <textarea
+                  className="task-box compact"
+                  value={agentCriteriaText}
+                  onChange={(event) => setAgentCriteriaText(event.target.value)}
+                  placeholder="每行一条完成标准，例如：优先基于本地资料回答"
+                />
+                <button className="primary-button" onClick={handleAgent} disabled={!!busy}>
+                  运行 Multi-Agent Runtime
+                </button>
+                {agentResult ? (
+                  <div className="stack">
+                <ResultPanel title="Master 总结">{agentResult.master_summary}</ResultPanel>
+                <ResultPanel title="最终输出">{agentResult.final_answer}</ResultPanel>
+                <ResultPanel title="当前完成标准">
+                  <div className="stack">
+                    {(agentResult.plans?.[agentResult.plans.length - 1]?.stop_criteria || []).map((item, index) => (
+                      <div className="trace-item" key={`${item}-${index}`}>
+                        <span>{item}</span>
                       </div>
                     ))}
                   </div>
                 </ResultPanel>
-              </div>
-            ) : null}
-          </section>
-        ) : null}
-
-        {activeTab === "Agent" ? (
-          <section className="content-card">
-            <h2>Agent 工作台</h2>
-            <p className="content-copy">优先查本地知识库，信息不足或具时效性时自动联网搜索。</p>
-            <textarea
-              className="task-box"
-              value={agentTask}
-              onChange={(event) => setAgentTask(event.target.value)}
-              placeholder="例如：介绍一下红楼梦，然后总结并导出为 markdown。"
-            />
-            <button className="primary-button" onClick={handleAgent} disabled={!!busy}>
-              运行 Agent
-            </button>
-            {agentResult ? (
-              <div className="stack">
-                <ResultPanel title="Agent 输出">{agentResult.answer}</ResultPanel>
-                <ResultPanel title="工具调用轨迹">
+                <ResultPanel title="运行诊断">
+                  <div className="stack">
+                    <div className="trace-item">
+                      <strong>rounds</strong>
+                      <span>{agentResult.diagnostics.total_rounds}</span>
+                    </div>
+                    <div className="trace-item">
+                      <strong>workers</strong>
+                      <span>{agentResult.diagnostics.total_workers}</span>
+                    </div>
+                    <div className="trace-item">
+                      <strong>memory hits / writes</strong>
+                      <span>{agentResult.diagnostics.memory_hit_count} / {agentResult.diagnostics.memory_write_count}</span>
+                    </div>
+                    <div className="trace-item">
+                      <strong>compression count</strong>
+                      <span>{agentResult.diagnostics.compression_count}</span>
+                    </div>
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="回合摘要">
+                  <div className="stack">
+                    {agentResult.round_summaries.map((item) => (
+                      <div className="trace-item timeline-card" key={`round-${item.round_index}`}>
+                        <strong>round {item.round_index}</strong>
+                        <span>{item.master_summary}</span>
+                        <div className="chip-row">
+                          <StatusChip tone={item.checker_passed ? "success" : "warn"}>
+                            {item.checker_passed ? "通过" : "继续补充"}
+                          </StatusChip>
+                          <StatusChip tone={item.checker_passed ? "success" : item.completion_status === "accepted_with_gaps" ? "accent" : "warn"}>
+                            {item.completion_status}
+                          </StatusChip>
+                          <StatusChip tone="neutral">workers {item.worker_count}</StatusChip>
+                          <StatusChip tone="neutral">score {item.checker_score}</StatusChip>
+                          {item.compression_applied ? <StatusChip tone="accent">压缩</StatusChip> : null}
+                        </div>
+                        <div className="timeline-meta">
+                          <span>stop reason: {item.stopping_reason || "continue_revision"}</span>
+                          <span>blocking gaps: {item.blocking_requirements?.length || 0}</span>
+                          <span>advisory gaps: {item.advisory_gaps?.length || 0}</span>
+                        </div>
+                        {item.blocking_requirements?.length ? (
+                          <div className="trace-item gap-card">
+                            <strong>本轮阻塞缺口</strong>
+                            {item.blocking_requirements.map((gap, gapIndex) => (
+                              <span key={`${gap}-${gapIndex}`}>{gap}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.advisory_gaps?.length ? (
+                          <div className="trace-item gap-card soft">
+                            <strong>本轮建议补充</strong>
+                            {item.advisory_gaps.map((gap, gapIndex) => (
+                              <span key={`${gap}-${gapIndex}`}>{gap}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="Worker 执行结果">
+                  <div className="stack">
+                    {agentResult.worker_results.map((item) => (
+                      <div className="trace-item" key={item.task_id}>
+                        <strong>{item.task_id}</strong>
+                        <span>{item.summary}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="Checker 结果">
+                  <div className="stack">
+                    <div className="trace-item timeline-card">
+                      <strong>{agentResult.checker.passed ? "已通过" : "需返工"}</strong>
+                      <div className="chip-row">
+                        <StatusChip tone={agentResult.checker.passed ? "success" : "warn"}>
+                          {agentResult.checker.completion_status}
+                        </StatusChip>
+                        <StatusChip tone="neutral">score {agentResult.checker.score}</StatusChip>
+                      </div>
+                    </div>
+                    {agentResult.checker.issues.map((issue, index) => (
+                      <div className="trace-item" key={`${issue}-${index}`}>
+                        <span>{issue}</span>
+                      </div>
+                    ))}
+                    {agentResult.checker.blocking_requirements?.length ? (
+                      <div className="trace-item gap-card">
+                        <strong>必须补齐</strong>
+                        {agentResult.checker.blocking_requirements.map((item, index) => (
+                          <span key={`${item}-${index}`}>{item}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {agentResult.checker.advisory_gaps?.length ? (
+                      <div className="trace-item gap-card soft">
+                        <strong>可接受缺口</strong>
+                        {agentResult.checker.advisory_gaps.map((item, index) => (
+                          <span key={`${item}-${index}`}>{item}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {agentResult.checker.notes ? (
+                      <div className="trace-item">
+                        <strong>审核说明</strong>
+                        <span>{agentResult.checker.notes}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="长期记忆命中">
+                  <div className="stack">
+                    {agentResult.memory_hits.length ? agentResult.memory_hits.map((item) => (
+                      <div className="trace-item" key={`${item.memory_id}-${item.summary}`}>
+                        <strong>{item.memory_type}</strong>
+                        <span>{item.summary}</span>
+                      </div>
+                    )) : <div className="trace-item"><span>本轮未命中长期记忆。</span></div>}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="长期记忆写入">
+                  <div className="stack">
+                    {agentResult.memory_writes.length ? agentResult.memory_writes.map((item) => (
+                      <div className="trace-item" key={`${item.fingerprint}-${item.title}`}>
+                        <strong>{item.title}</strong>
+                        <span>{item.summary}</span>
+                      </div>
+                    )) : <div className="trace-item"><span>本轮没有新增长期记忆。</span></div>}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="上下文快照">
+                  <div className="stack">
+                    {agentResult.context_snapshots.map((item, index) => (
+                      <div className="trace-item" key={`${item.task_id}-${index}`}>
+                        <strong>snapshot #{index + 1}</strong>
+                        <span>compression: {item.compression_applied ? "yes" : "no"} | token_estimate: {item.token_estimate}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ResultPanel>
+                <ResultPanel title="运行轨迹">
                   <div className="stack">
                     {agentResult.traces.map((trace, index) => (
                       <div className="trace-item" key={`${trace}-${index}`}>
@@ -388,26 +555,44 @@ export default function App() {
                     ))}
                   </div>
                 </ResultPanel>
-              </div>
-            ) : null}
+                <ResultPanel title="最近运行任务">
+                  <div className="stack">
+                    {runtimeTasks.map((item) => (
+                      <div className="trace-item timeline-card" key={`task-${item.id}`}>
+                        <strong>#{item.id} · {item.status}</strong>
+                        <span>{item.task}</span>
+                        <div className="chip-row">
+                          <StatusChip tone={item.status === "completed" ? "success" : item.status === "failed" ? "danger" : "warn"}>
+                            {item.status}
+                          </StatusChip>
+                          <StatusChip tone="neutral">checker {item.checker_score}</StatusChip>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ResultPanel>
+                  </div>
+                ) : null}
+              </>
+            )}
           </section>
         ) : null}
 
-        {activeTab === "摘要" ? (
+        {activeTab === "资料总结" ? (
           <section className="content-card">
-            <h2>知识库摘要</h2>
-            <p className="content-copy">面向整个知识库做整体总结，适合快速了解当前资料主题。</p>
+            <h2>资料总结</h2>
+            <p className="content-copy">面向整个学习资料库生成一份总览，适合快速把握当前主题和复习重点。</p>
             <button className="primary-button" onClick={handleSummary} disabled={!!busy}>
-              生成摘要
+              生成总结
             </button>
             {summaryResult ? <ResultPanel title="摘要内容">{summaryResult.summary}</ResultPanel> : null}
           </section>
         ) : null}
 
-        {activeTab === "文档" ? (
+        {activeTab === "资料库" ? (
           <section className="content-card">
-            <h2>文档管理</h2>
-            <p className="content-copy">展示当前本地知识库中已纳入管理的文件。</p>
+            <h2>资料库</h2>
+            <p className="content-copy">展示当前已纳入学习资料库管理的文件，方便检查讲义、论文和笔记是否已入库。</p>
             <div className="doc-grid">
               {documents.map((doc) => (
                 <article className="doc-card" key={doc.path}>
@@ -417,6 +602,25 @@ export default function App() {
                   <code>{doc.path}</code>
                 </article>
               ))}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "记忆库" ? (
+          <section className="content-card">
+            <h2>记忆库</h2>
+            <p className="content-copy">展示当前长期记忆中的高价值结果，用于后续任务复用、召回和偏好参考。</p>
+            <div className="stack">
+              {memoryList.map((item) => (
+                <article className="doc-card" key={`${item.memory_id}-${item.fingerprint}`}>
+                  <strong>{item.title}</strong>
+                  <span>{item.memory_type}</span>
+                  <span>quality: {item.quality_score}</span>
+                  <code>{item.source}</code>
+                  <p>{item.summary}</p>
+                </article>
+              ))}
+              {!memoryList.length ? <div className="trace-item"><span>当前还没有长期记忆。</span></div> : null}
             </div>
           </section>
         ) : null}

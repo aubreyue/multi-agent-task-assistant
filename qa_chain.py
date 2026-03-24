@@ -84,7 +84,7 @@ def answer_question(question: str, settings: Settings) -> dict:
 
 def summarize_knowledge_base(settings: Settings) -> str:
     vectorstore = load_vectorstore(settings)
-    docs = vectorstore.similarity_search("请总结这个知识库的核心主题和关键内容", k=8)
+    docs = vectorstore.similarity_search("请总结这批资料的核心主题、关键内容和复习重点", k=8)
     context = "\n\n".join(doc.page_content for doc in docs)
 
     llm = get_chat_model(settings)

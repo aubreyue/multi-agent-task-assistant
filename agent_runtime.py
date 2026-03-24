@@ -25,22 +25,22 @@ from web_tools import format_web_results, search_web
 
 
 AGENT_SYSTEM_PROMPT = """
-你是一个基于 LangChain 构建的中文 AI Agent，负责帮助用户探索本地知识库，并在必要时联网补充信息。
+你是一个基于 LangChain 构建的中文学习资料智能助理，负责帮助用户围绕课程讲义、论文、技术文档和个人笔记完成学习、复习和研究任务。
 
 你的工作方式：
 1. 优先使用工具，不要凭空回答。
-2. 回答知识库问题时，优先检查本地知识库、MCP 工具和检索结果。
-3. 若用户询问“最新/最近/当前/今天”等时效性信息，或本地知识库不足以回答，应主动联网搜索。
-4. 回答中尽量区分“本地知识库依据”和“联网搜索依据”，并说明来源。
+2. 处理学习任务时，优先检查本地学习资料、MCP 工具和检索结果。
+3. 若用户询问“最新/最近/当前/今天”等时效性信息，或当前学习资料不足以回答，应主动联网搜索。
+4. 回答中尽量区分“学习资料依据”和“联网补充依据”，并说明来源。
 5. 如果发现向量库尚未建立，应提示用户先构建，或调用可用工具进行重建。
-6. 输出保持结构化、简洁、适合学习者理解。
+6. 输出保持结构化、简洁、适合学习者理解，可适当整理为提纲、知识点或复习笔记。
 """
 
 
 def build_agent(settings: Settings):
     @tool
     def rag_answer(question: str) -> str:
-        """基于本地向量检索和 LLM 生成最终答案，适合需要引用来源的知识库问答。"""
+        """基于本地学习资料检索并生成答案，适合课程讲义、论文、技术文档与笔记的学习问答。"""
         result = answer_question(question, settings)
         answer = result.get("answer", "")
         context_docs = result.get("context", [])
@@ -50,7 +50,7 @@ def build_agent(settings: Settings):
 
     @tool
     def inspect_local_kb() -> str:
-        """查看本地知识库当前是否已有文档、是否已经构建向量库。"""
+        """查看本地学习资料库是否已有文档，以及是否已经构建向量库。"""
         files = list_supported_files()
         payload = {
             "document_count": len(files),
@@ -61,23 +61,26 @@ def build_agent(settings: Settings):
 
     @tool
     def preview_retrieved_chunks(query: str, top_k: int = 4) -> str:
-        """仅执行向量检索并返回片段预览，用于排查召回效果。"""
+        """执行学习资料检索并返回片段预览，用于检查召回内容是否适合当前学习问题。"""
         docs = retrieve_documents(query, settings, k=top_k)
         preview = build_context_preview(docs)
         return json.dumps(preview, ensure_ascii=False, indent=2)
 
     @tool
     def export_agent_notes(filename: str, content: str) -> str:
-        """把 Agent 的分析结果导出为 Markdown 文件，便于保存实验记录。"""
+        """把学习总结、研究笔记或复习提纲导出为 Markdown 文件。"""
         safe_name = filename if filename.endswith(".md") else f"{filename}.md"
         output_path = save_markdown(safe_name, content)
         return f"已导出到 {output_path}"
 
     @tool
     def web_search(query: str, max_results: int = 5) -> str:
-        """联网搜索公开网页内容，适合处理知识库中没有、或具有时效性的问题。"""
-        results = search_web(query, max_results=max_results)
-        return format_web_results(results)
+        """联网搜索公开网页内容，适合补充学习资料中缺失的背景知识或时效性信息。"""
+        try:
+            results = search_web(query, max_results=max_results)
+            return format_web_results(results)
+        except Exception as exc:
+            return f"联网搜索当前不可用：{exc}"
 
     return [rag_answer, inspect_local_kb, preview_retrieved_chunks, export_agent_notes, web_search]
 

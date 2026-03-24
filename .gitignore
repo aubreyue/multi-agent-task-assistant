@@ -1,0 +1,37 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment files
+.env
+frontend/.env
+
+# Node / frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+
+# Runtime state
+state/runtime.db
+state/*.db
+
+# Outputs
+outputs/*.md
+outputs/runs/
+
+# Vector stores and local indexes
+vectorstore/*.faiss
+vectorstore/*.pkl
+
+# Logs
+*.log

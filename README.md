@@ -1,76 +1,158 @@
-# LangChain 本地知识库 + 联网搜索 Agent
+# Multi-Agent 私人任务助理
 
-这是一个面向 AI Agent 学习的前后端分离项目：
+一个面向个人资料与学习资料的 `Multi-Agent` 任务助理项目，目标不是做“又一个聊天页面”，而是把任务拆解、工具调用、结果审核、记忆沉淀和前端观测串成一个完整闭环。
 
-- 后端：`FastAPI`
-- 前端：`React + Vite`
-- 核心能力：`RAG + LangChain Agent + MCP + Tavily 搜索`
+技术栈：
 
-项目保留了原来的 Python 能力层，并把原本由 Streamlit 页面完成的交互迁移成了：
+- `FastAPI`
+- `React + Vite`
+- `LangChain`
+- `FAISS`
+- `SQLite`
+- `MCP`
+- `Tavily Search`
 
-- `backend/` 提供 API
-- `frontend/` 提供真实前端页面
+核心能力：
 
-## 当前架构
+- `Master + Worker + Final Checker`
+- `Short-term Memory + Long-term Memory`
+- `RAG + Web Search + MCP Tools`
+- `运行轨迹 + 回合摘要 + 缺口分级`
+
+## 这个项目解决什么问题
+
+很多资料型 Agent demo 只能做单轮问答，很难回答下面这些更真实的问题：
+
+- 一个复杂任务怎么拆成多个步骤
+- 工具到底有没有被正确调用
+- 结果不完整时系统怎么知道还要继续补
+- 历史结论怎么沉淀并在后续任务里复用
+- 前端怎么把整个 Agent 运行过程讲清楚
+
+这个项目围绕这些问题做了一个学习型但完整的工程实现：
+
+- `Master` 负责任务规划、派发和停机判断
+- `Worker` 是通用执行单元，不预设固定角色
+- `Final Checker` 审核任务完成度、证据充分性和缺口类型
+- `Memory Layer` 管理上下文和长期沉淀
+- 前端把回合状态、阻塞缺口、记忆命中、补救路径展示出来
+
+## 当前能力
+
+### 1. 资料入库与本地 RAG
+
+- 支持导入 `.md`、`.txt`、`.pdf`
+- 对学习资料切分、向量化并写入 `FAISS`
+- 提供本地问答、来源引用和片段预览
+
+### 2. Multi-Agent Runtime
+
+- `Master` 接收任务并生成子任务
+- `Worker` 直接调用统一工具层执行任务
+- `Final Checker` 输出：
+  - `passed`
+  - `score`
+  - `blocking_requirements`
+  - `advisory_gaps`
+  - `completion_status`
+- 当存在阻塞缺口时，Master 会基于缺口反馈继续规划补救轮
+
+### 3. 记忆层
+
+- `Short-term Memory`
+  - `Pinned Context`
+  - `Sliding Window`
+  - `LLM Compression`
+- `Long-term Memory`
+  - 高价值结果入库
+  - 向量检索复用
+  - 强去重和简单近似重复处理
+- `SQLite` 记录任务、worker 运行、记忆和运行产物
+
+### 4. 工具层
+
+运行时统一通过 `Tool Registry` 暴露能力，包括：
+
+- 本地 RAG 工具
+- `web_search`
+- MCP 工具
+- 导出工具
+- 记忆检索工具
+
+### 5. 前端控制台
+
+前端已支持：
+
+- 学习问答
+- 多 Agent 任务运行
+- 资料总结
+- 资料库浏览
+- 记忆库查看
+- 回合摘要 / 缺口 / 运行轨迹 / 记忆命中展示
+
+## 系统结构
 
 ```text
 langchain_knowledge_qa/
-├── backend/
-│   └── main.py
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   └── styles.css
-│   ├── package.json
-│   └── vite.config.js
-├── agent_runtime.py
-├── ingest.py
-├── mcp_server.py
-├── qa_chain.py
-├── web_tools.py
-├── utils.py
-├── data/
-├── outputs/
-├── vectorstore/
-└── app.py
+├── backend/            # FastAPI API
+├── frontend/           # React 控制台
+├── runtime/            # Master / Worker / Checker / Planner
+├── tools/              # Tool Registry 与工具封装
+├── memory/             # 短期记忆、长期记忆、压缩、去重、检索
+├── storage/            # SQLite 初始化与 repository
+├── docs/               # 架构与产品文档
+├── tests/              # 轻量单元测试
+├── data/               # 本地资料
+├── outputs/            # 导出与运行记录
+├── vectorstore/        # 资料向量库
+├── qa_chain.py         # 本地问答链
+├── mcp_server.py       # MCP 服务
+└── web_tools.py        # 联网搜索工具
 ```
 
-说明：
+## 演示建议
 
-- `app.py` 仍保留，作为旧版 Streamlit demo
-- 日常开发和展示建议使用 `React + FastAPI`
+最推荐的演示顺序：
 
-## 功能说明
+1. 上传 1 到 3 份讲义或技术文档到 `data/`
+2. 点击“构建 / 更新资料索引”
+3. 在“学习问答”里问一个资料内问题
+4. 在“多Agent任务”里输入一个有明确完成标准的任务
+5. 观察：
+   - Master 规划
+   - Worker 结果
+   - Checker 结论
+   - blocking / advisory gaps
+   - 长期记忆命中与写入
 
-### 1. 本地知识库 RAG
+推荐任务示例：
 
-- 支持导入 `.md`、`.txt`、`.pdf`
-- 文档切分、向量化、写入 `FAISS`
-- 基于本地知识库做检索问答
-- 返回引用来源和片段预览
+- `先基于当前资料总结 RAG 的核心概念，再说明引用来源；如果资料不足，可联网补充背景知识。`
+- `检查当前资料是否包含作者或发布者信息；若不足则联网补充，并整理成简短研究摘要。`
+- `先检索长期记忆和本地资料，再输出一份关于多 Agent Runtime 的结构化学习笔记。`
 
-### 2. Agent 工作台
+推荐完成标准示例：
 
-- 使用 `LangChain create_agent`
-- 优先查询本地知识库
-- 本地知识不足时调用联网搜索
-- 展示工具调用轨迹
-- 导出 Agent 结果为 Markdown
+- `优先基于本地资料回答`
+- `结论要说明资料依据`
+- `资料不足时允许联网补充`
 
-### 3. MCP 工具接入
+## 适合在简历或面试里怎么讲
 
-项目内置本地 `MCP server`，暴露：
+一句话版本：
 
-- `list_knowledge_files`
-- `inspect_knowledge_base_status`
-- `rebuild_knowledge_base`
-- `search_knowledge_base`
-- `summarize_knowledge_base_tool`
+> 我做了一个面向个人资料和学习资料的 Multi-Agent 任务助理，重点实现了 Master-Worker-Checker 运行时、短期/长期记忆、RAG 与联网搜索协同，以及可观测的前端任务控制台。
 
-### 4. 前后端分离
+展开版可以强调：
 
-后端 API 示例：
+- 不只是聊天，而是任务拆解与调度
+- 不只是生成答案，而是会审核结果并区分阻塞缺口与建议缺口
+- 不只是单轮上下文，而是有短期上下文管理和长期记忆沉淀
+- 不只是后端脚本，而是有前后端分离和运行轨迹展示
+
+## API
+
+主要接口：
 
 - `GET /api/status`
 - `GET /api/documents`
@@ -78,22 +160,18 @@ langchain_knowledge_qa/
 - `POST /api/vectorstore/rebuild`
 - `POST /api/qa`
 - `POST /api/summary`
-- `POST /api/agent/run`
-
-前端页面包含：
-
-- 项目控制台
-- 问答页
-- Agent 页
-- 摘要页
-- 文档页
+- `POST /api/runtime/run`
+- `GET /api/runtime/tasks`
+- `GET /api/memory/list`
+- `GET /api/memory/stats`
+- `POST /api/memory/search`
 
 ## 环境变量
 
-后端参考 [`.env.example`](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/.env.example)。
-前端参考 [frontend/.env.example](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/frontend/.env.example)。
+后端参考 [`.env.example`](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/.env.example)  
+前端参考 [frontend/.env.example](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/frontend/.env.example)
 
-当前至少需要：
+最低需要：
 
 ```env
 OPENAI_API_KEY=
@@ -104,35 +182,27 @@ TAVILY_API_KEY=
 FRONTEND_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 ```
 
-前端本地开发环境变量：
+前端本地开发：
 
 ```env
 VITE_API_BASE=http://127.0.0.1:8000/api
 ```
 
-## 启动方式
+## 本地启动
 
-### 1. 安装 Python 依赖
+安装 Python 依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 启动后端
-
-在项目根目录运行：
+启动后端：
 
 ```bash
 uvicorn backend.main:app --reload
 ```
 
-默认地址：
-
-- [http://127.0.0.1:8000](http://127.0.0.1:8000)
-
-### 3. 启动前端
-
-进入前端目录：
+启动前端：
 
 ```bash
 cd frontend
@@ -140,164 +210,36 @@ npm install
 npm run dev
 ```
 
-默认地址：
-
-- [http://127.0.0.1:5173](http://127.0.0.1:5173)
-
 ## 公网部署
 
-推荐最省事的组合：
+推荐组合：
 
 - 前端：`Vercel`
 - 后端：`Render`
 
-### 1. 部署 FastAPI 到 Render
+关键点：
 
-1. 把整个项目推到 GitHub。
-2. 登录 Render，新建 `Web Service`，选择这个仓库。
-3. Root Directory 留空，或者直接指向仓库根目录。
-4. Build Command：
+- 前端通过 `VITE_API_BASE` 指向后端
+- 后端通过 `FRONTEND_ORIGINS` 配置跨域
+- Render 默认磁盘是临时的，适合演示，不适合长期保存资料和输出
 
-```bash
-pip install -r requirements.txt
-```
+仓库里已经提供：
 
-5. Start Command：
+- [render.yaml](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/render.yaml)
 
-```bash
-uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-```
+## 当前阶段与下一步
 
-6. 环境变量至少配置：
+当前已经完成：
 
-```env
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
-CHAT_MODEL=
-EMBEDDING_MODEL=
-TAVILY_API_KEY=
-FRONTEND_ORIGINS=https://你的-vercel-前端域名
-```
+- 资料型 RAG
+- Multi-Agent runtime
+- 短期 / 长期记忆
+- 缺口驱动补救
+- 回合级可观测面板
 
-7. 部署完成后，你会拿到一个后端公网地址，例如：
+如果继续迭代，最值得补的是：
 
-```text
-https://langchain-knowledge-qa-api.onrender.com
-```
-
-说明：
-
-- 仓库里已经提供了 [render.yaml](/Users/aubreyue/STUDY/AI%20Agent/langchain_knowledge_qa/render.yaml)，你也可以用 Render Blueprint 直接导入。
-- `data/`、`outputs/`、`vectorstore/` 在 Render 默认是临时磁盘，服务重启后可能丢失。学习演示可以先这样用，后续如果要长期保存，再加持久化磁盘或对象存储。
-
-### 2. 部署 React 前端到 Vercel
-
-1. 登录 Vercel，新建项目，导入同一个 GitHub 仓库。
-2. Framework 选 `Vite`。
-3. Root Directory 设为：
-
-```text
-frontend
-```
-
-4. Build Command 保持默认，或者填写：
-
-```bash
-npm run build
-```
-
-5. Output Directory：
-
-```text
-dist
-```
-
-6. 配置前端环境变量：
-
-```env
-VITE_API_BASE=https://你的-render-后端域名/api
-```
-
-例如：
-
-```env
-VITE_API_BASE=https://langchain-knowledge-qa-api.onrender.com/api
-```
-
-7. 部署完成后，你会拿到前端公网地址，例如：
-
-```text
-https://langchain-knowledge-qa.vercel.app
-```
-
-### 3. 回填跨域域名
-
-当前端 Vercel 域名确定后，回到 Render，把：
-
-```env
-FRONTEND_ORIGINS=https://你的-vercel-前端域名
-```
-
-改成真实地址，然后重新部署后端。
-
-如果你有多个前端域名，可以用英文逗号分隔：
-
-```env
-FRONTEND_ORIGINS=https://你的正式域名,https://你的-vercel-预览域名
-```
-
-### 4. 最终访问
-
-部署完成后，直接打开你的 Vercel 域名即可，用户不再需要本地终端命令。
-
-## 旧版 Streamlit
-
-如果你还想继续看原型版本，也可以运行：
-
-```bash
-streamlit run app.py
-```
-
-不过当前推荐的主入口是：
-
-- `FastAPI` 后端
-- `React` 前端
-
-## 适合学习的知识点
-
-### RAG
-
-- 文档加载与切分
-- 向量化与 FAISS 检索
-- 基于上下文回答
-- 引用来源展示
-
-### Agent
-
-- LangChain Agent
-- Tool calling
-- 工具轨迹记录
-- 本地检索与联网搜索协同
-
-### MCP
-
-- MCP server 定义工具
-- 使用 `langchain-mcp-adapters` 接入工具
-- 协议化工具访问
-
-### 工程化
-
-- 前后端分离
-- FastAPI API 设计
-- React 页面状态管理
-- 文件上传与异步交互
-
-## 后续建议
-
-如果你想把它继续打磨成更强的简历项目，优先建议：
-
-1. 给 Agent 输出增加更清晰的来源分区
-2. 增加对话历史持久化
-3. 增加检索评测或简单 benchmark
-4. 增加第二类工具，例如 SQL 或浏览器
-5. 引入 LangSmith 做链路观测
+- 更精细的 worker 并行与重试策略
+- 更强的长期记忆评分和合并策略
+- 更系统的评测集和自动化测试
+- 更成熟的任务控制台和运行可视化
